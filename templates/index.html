@@ -1,0 +1,378 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Biskita Trans Depok — Sistem Navigasi</title>
+  <link rel="stylesheet" href="/css/style.css" />
+  <style>
+    /* Add CSS for pure HTML forms */
+    .algo-radio { display: none; }
+    .algo-radio:checked + label {
+      border: 2px solid var(--primary) !important;
+      background: var(--surface2) !important;
+    }
+    .algo-radio:checked + label .algo-title {
+      color: var(--primary);
+    }
+    .submit-btn-wrap {
+      margin-top: 20px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="app-wrapper">
+
+    <!-- ===== HEADER ===== -->
+    <header class="site-header">
+      <div class="header-logo">🚌</div>
+      <div class="header-text">
+        <h1>BISKITA TRANS DEPOK</h1>
+        <p>Sistem Navigasi Rute — Proyek Akhir Struktur Data &amp; Algoritma</p>
+      </div>
+      <div class="header-chips">
+        <span class="chip">Graf</span>
+        <span class="chip">BFS</span>
+        <span class="chip">Dijkstra</span>
+        <span class="chip">Stack</span>
+        <span class="chip">BST</span>
+        <span class="chip">Merge Sort</span>
+      </div>
+    </header>
+
+    <!-- ===== MAIN GRID ===== -->
+    <div class="main-grid">
+
+      <!-- ===== SIDEBAR ===== -->
+      <nav class="sidebar" aria-label="Navigasi utama">
+        <div class="sidebar-section">Menu</div>
+
+        <a href="/?tab=cari" class="nav-tab {% if tab == 'cari' %}active{% endif %}">
+          <span class="tab-icon">🔍</span>
+          <span class="tab-label">Cari Rute</span>
+        </a>
+
+        <a href="/?tab=halte" class="nav-tab {% if tab == 'halte' %}active{% endif %}">
+          <span class="tab-icon">🚏</span>
+          <span class="tab-label">Daftar Halte</span>
+        </a>
+
+        <a href="/?tab=riwayat" class="nav-tab {% if tab == 'riwayat' %}active{% endif %}">
+          <span class="tab-icon">📋</span>
+          <span class="tab-label">Riwayat</span>
+          <span class="nav-badge" id="stack-badge">{{ stack_size }}</span>
+        </a>
+
+        <a href="/?tab=test" class="nav-tab {% if tab == 'test' %}active{% endif %}">
+          <span class="tab-icon">🧪</span>
+          <span class="tab-label">Unit Test</span>
+        </a>
+
+        <div class="sidebar-section" style="margin-top: 24px;">Info</div>
+        <div style="padding: 0 14px; font-size: 12px; color: var(--text3); line-height: 1.7;">
+          <p>50 halte</p>
+          <p>50 koneksi edge</p>
+          <p>Stack max: 20 entri</p>
+        </div>
+      </nav>
+
+      <!-- ===== CONTENT PANEL ===== -->
+      <main class="content-panel">
+
+        {% if tab == 'cari' %}
+        <!-- ─── TAB: CARI RUTE ─── -->
+        <div id="tab-cari" class="section active">
+          <div class="panel-header">
+            <div class="panel-title">Cari Rute</div>
+            <div class="panel-sub">Pilih halte asal &amp; tujuan, lalu pilih algoritma pencarian</div>
+          </div>
+          <div class="panel-body">
+
+            <form action="/?tab=cari" method="POST">
+              <div class="form-row">
+                <div class="form-group">
+                  <label class="form-label" for="sel-asal">Halte Asal</label>
+                  <select id="sel-asal" name="asal" aria-label="Pilih halte asal">
+                    {% for h in DATA_HALTE %}
+                    <option value="{{ h[0] }}" {% if h[0] == asal %}selected{% endif %}>
+                      {{ "%02d" % h[0] }}. {{ h[1] }}
+                    </option>
+                    {% endendfor %}
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label class="form-label" for="sel-tujuan">Halte Tujuan</label>
+                  <select id="sel-tujuan" name="tujuan" aria-label="Pilih halte tujuan">
+                    {% for h in DATA_HALTE %}
+                    <option value="{{ h[0] }}" {% if h[0] == tujuan %}selected{% endif %}>
+                      {{ "%02d" % h[0] }}. {{ h[1] }}
+                    </option>
+                    {% endfor %}
+                  </select>
+                </div>
+              </div>
+
+              <div class="algo-section-label">Pilih Algoritma</div>
+
+              <div class="algo-grid">
+                <input type="radio" id="algo-bfs-r" name="algo" value="bfs" class="algo-radio" {% if algo == 'bfs' %}checked{% endif %}>
+                <label class="algo-card" for="algo-bfs-r" tabindex="0">
+                  <div class="algo-title">⚡ BFS</div>
+                  <div class="algo-desc">Breadth-First Search — temukan rute dengan jumlah halte paling sedikit. O(V+E)</div>
+                </label>
+
+                <input type="radio" id="algo-dijkstra-r" name="algo" value="dijkstra" class="algo-radio" {% if algo == 'dijkstra' %}checked{% endif %}>
+                <label class="algo-card" for="algo-dijkstra-r" tabindex="0">
+                  <div class="algo-title">📍 Dijkstra</div>
+                  <div class="algo-desc">Priority queue min-heap — temukan rute dengan jarak total terpendek. O((V+E) log V)</div>
+                </label>
+              </div>
+
+              <input type="radio" id="algo-keduanya-r" name="algo" value="keduanya" class="algo-radio" {% if algo == 'keduanya' %}checked{% endif %}>
+              <label class="algo-card-full" for="algo-keduanya-r" tabindex="0" style="display:block; margin-top:10px;">
+                <div class="algo-title">🔀 Bandingkan Keduanya</div>
+                <div class="algo-desc">Jalankan BFS dan Dijkstra secara bersamaan, lalu tampilkan perbandingan hasil &amp; selisih jarak.</div>
+              </label>
+
+              <div class="submit-btn-wrap">
+                <button type="submit" class="btn-primary" id="btn-cari">
+                  🔍&nbsp; Cari Rute
+                </button>
+              </div>
+            </form>
+
+            <div id="result-area" style="margin-top: 20px;">
+              {% if error %}
+                <div class="result-box error"><div class="result-error-msg">⚠ {{ error }}</div></div>
+              {% endif %}
+
+              {% if result_single %}
+                {% set r = result_single %}
+                {% if not r.path %}
+                  <div class="result-box error">
+                    <div class="result-method">{{ r.metode }}</div>
+                    <div class="result-error-msg">Rute tidak ditemukan.</div>
+                  </div>
+                {% else %}
+                  <div class="result-box bfs">
+                    <div class="result-method">{{ r.metode }}</div>
+                    <div class="result-route">
+                      {% for n in r.pathNama %}
+                        <span class="halte-pill {% if loop.first %}start{% elif loop.last %}end{% endif %}">{{ n }}</span>
+                        {% if not loop.last %}<span class="arrow-sep">→</span>{% endif %}
+                      {% endfor %}
+                    </div>
+                    <div class="result-stats">
+                      <div class="stat-item">
+                        <div class="stat-val">{{ r.jarak }} <span class="stat-unit">km</span></div>
+                        <div class="stat-lbl">Total jarak</div>
+                      </div>
+                      <div class="stat-item">
+                        <div class="stat-val">{{ r.path|length }}</div>
+                        <div class="stat-lbl">Halte dilewati</div>
+                      </div>
+                      <div class="stat-item">
+                        <div class="stat-val">{{ r.transit }}</div>
+                        <div class="stat-lbl">Halte transit</div>
+                      </div>
+                      <div class="stat-item">
+                        <div class="stat-val">{{ r.ms }} <span class="stat-unit">ms</span></div>
+                        <div class="stat-lbl">Komputasi</div>
+                      </div>
+                    </div>
+                  </div>
+                {% endif %}
+              {% endif %}
+
+              {% if result_bfs and result_dijkstra %}
+                <div class="compare-grid">
+                  {% for r, cls in [(result_bfs, 'bfs'), (result_dijkstra, 'dijkstra')] %}
+                    {% if not r.path %}
+                      <div class="result-box error">
+                        <div class="result-method">{{ r.metode }}</div>
+                        <div class="result-error-msg">Rute tidak ditemukan.</div>
+                      </div>
+                    {% else %}
+                      <div class="result-box {{ cls }}">
+                        <div class="result-method">{{ r.metode }}</div>
+                        <div class="result-route">
+                          {% for n in r.pathNama %}
+                            <span class="halte-pill {% if loop.first %}start{% elif loop.last %}end{% endif %}">{{ n }}</span>
+                            {% if not loop.last %}<span class="arrow-sep">→</span>{% endif %}
+                          {% endfor %}
+                        </div>
+                        <div class="result-stats">
+                          <div class="stat-item">
+                            <div class="stat-val">{{ r.jarak }} <span class="stat-unit">km</span></div>
+                            <div class="stat-lbl">Total jarak</div>
+                          </div>
+                          <div class="stat-item">
+                            <div class="stat-val">{{ r.path|length }}</div>
+                            <div class="stat-lbl">Halte dilewati</div>
+                          </div>
+                          <div class="stat-item">
+                            <div class="stat-val">{{ r.transit }}</div>
+                            <div class="stat-lbl">Halte transit</div>
+                          </div>
+                          <div class="stat-item">
+                            <div class="stat-val">{{ r.ms }} <span class="stat-unit">ms</span></div>
+                            <div class="stat-lbl">Komputasi</div>
+                          </div>
+                        </div>
+                      </div>
+                    {% endif %}
+                  {% endfor %}
+                </div>
+                {% if compare_note %}
+                  <div class="compare-note">{{ compare_note|safe }}</div>
+                {% endif %}
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if tab == 'halte' %}
+        <!-- ─── TAB: DAFTAR HALTE ─── -->
+        <div id="tab-halte" class="section active">
+          <div class="panel-header">
+            <div class="panel-title">Daftar Halte</div>
+            <div class="panel-sub">50 halte Biskita Trans Depok — klik halte untuk melihat detail &amp; koneksi</div>
+          </div>
+          <div class="panel-body">
+            <form action="/" method="GET">
+              <input type="hidden" name="tab" value="halte">
+              <div class="search-wrap" style="display:flex; gap:10px;">
+                <span class="search-icon">🔍</span>
+                <input type="text" name="query" value="{{ query }}" placeholder="Cari nama halte..." aria-label="Cari halte" />
+                <button type="submit" class="btn-primary" style="width: auto; padding: 0 15px;">Cari</button>
+              </div>
+              <div class="sort-row" role="group" aria-label="Urutan tampilan" style="margin-top: 15px;">
+                <button type="submit" name="sort" value="nama" class="sort-btn {% if sort_by == 'nama' %}active{% endif %}">A–Z Nama</button>
+                <button type="submit" name="sort" value="id" class="sort-btn {% if sort_by == 'id' %}active{% endif %}">ID</button>
+                <button type="submit" name="sort" value="zona" class="sort-btn {% if sort_by == 'zona' %}active{% endif %}">Zona</button>
+              </div>
+            </form>
+            
+            <div class="halte-list" id="halte-list" role="list">
+              {% if not list_halte %}
+                <div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada halte yang cocok.</p></div>
+              {% else %}
+                {% for h in list_halte %}
+                <details class="halte-item-details" style="margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface);">
+                  <summary class="halte-item" style="cursor: pointer; border: none; margin: 0; padding: 16px;">
+                    <div class="halte-num">{{ h.id }}</div>
+                    <div class="halte-info">
+                      <div class="halte-name">{{ h.nama }}</div>
+                      <div class="halte-fasilitas">{{ h.fasilitas|join(', ') if h.fasilitas else '—' }}</div>
+                    </div>
+                    <span class="zona-badge z-{{ h.zona }}">Zona {{ h.zona }}</span>
+                    <span class="chevron" style="pointer-events:none;">›</span>
+                  </summary>
+                  <div class="halte-detail" style="padding: 0 16px 16px; border-top: 1px solid var(--border);">
+                    <div class="detail-grid">
+                      <div class="detail-col">
+                        <div class="detail-label">Fasilitas</div>
+                        <div class="detail-tags">
+                          {% if h.fasilitas %}
+                            {% for f in h.fasilitas %}<span class="fasilitas-tag">{{ f }}</span>{% endfor %}
+                          {% else %}—{% endif %}
+                        </div>
+                      </div>
+                      <div class="detail-col">
+                        <div class="detail-label">Terhubung ke</div>
+                        <div class="tetangga-list">
+                          {% for nid, d in adj.get(h.id, []) %}
+                            <div class="tetangga-row">
+                              <span>{{ halteMap[nid]['nama'] if nid in halteMap else 'Tidak diketahui' }}</span>
+                              <span class="tetangga-dist">{{ d }} km</span>
+                            </div>
+                          {% endfor %}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </details>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if tab == 'riwayat' %}
+        <!-- ─── TAB: RIWAYAT ─── -->
+        <div id="tab-riwayat" class="section active">
+          <div class="panel-header">
+            <div class="panel-title">Riwayat Pencarian</div>
+            <div class="panel-sub">Stack berbasis Linked List — LIFO, maksimum 20 entri</div>
+          </div>
+          <div class="panel-body">
+            <div class="riwayat-header">
+              <span class="riwayat-sub">Entri terbaru di atas (top of stack)</span>
+              <div class="btn-group">
+                <a href="/?tab=riwayat&action=pop" class="btn-secondary" style="text-decoration:none;">↩ Hapus Terakhir</a>
+                <a href="/?tab=riwayat&action=clear" class="btn-secondary btn-danger" style="text-decoration:none;">🗑 Hapus Semua</a>
+              </div>
+            </div>
+            <div id="riwayat-list">
+              {% if not history %}
+                <div class="empty-state"><div class="empty-icon">📋</div><p>Belum ada riwayat pencarian.<br>Cari rute terlebih dahulu.</p></div>
+              {% else %}
+                {% for r in history %}
+                <div class="history-item {% if loop.first %}latest{% endif %}">
+                  <div class="history-top">
+                    <span class="history-badge {% if 'BFS' in r.metode %}hb-bfs{% else %}hb-dijk{% endif %}">
+                      {{ 'BFS' if 'BFS' in r.metode else 'Dijkstra' }}
+                    </span>
+                    {% if loop.first %}<span class="latest-badge">Terbaru</span>{% endif %}
+                    <span class="history-time">{{ r.timestamp }}</span>
+                  </div>
+                  <div class="history-route">{{ r.asal }} <span>→</span> {{ r.tujuan }}</div>
+                  <div class="history-stats">
+                    <span>📍 {{ r.jarak }} km</span>
+                    <span>🚏 {{ r.path|length }} halte</span>
+                    <span>⏱ {{ r.ms }} ms</span>
+                  </div>
+                </div>
+                {% endfor %}
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+        {% if tab == 'test' %}
+        <!-- ─── TAB: UNIT TEST ─── -->
+        <div id="tab-test" class="section active">
+          <div class="panel-header">
+            <div class="panel-title">Unit Test</div>
+            <div class="panel-sub">8 skenario pengujian — Graf, BFS, Dijkstra, Stack, BST, Merge Sort, &amp; Performa</div>
+          </div>
+          <div class="panel-body">
+            <div class="test-header">
+              <span class="test-sub">Klik tombol untuk menjalankan semua pengujian sekaligus</span>
+              <form action="/?tab=test" method="POST" style="margin:0;">
+                <button type="submit" class="btn-primary" style="width:auto; padding: 9px 18px;">
+                  ▶&nbsp; Jalankan Test
+                </button>
+              </form>
+            </div>
+            <div id="test-output" aria-live="polite">
+              {% if test_output %}
+                {{ test_output|safe }}
+              {% else %}
+                Tekan tombol "Jalankan Test" untuk mulai...
+              {% endif %}
+            </div>
+          </div>
+        </div>
+        {% endif %}
+
+      </main>
+    </div>
+  </div>
+
+</body>
+</html>
