@@ -1,20 +1,33 @@
 // ============================================================
-// APP — UI Controller (Client-side, no backend required)
-// Works on static hosting like Vercel
+// APP — UI Controller (Backend integrated)
+// Communicates with Python Flask Backend
 // ============================================================
 
 let currentAlgo = 'bfs';
 let halteSort = 'nama';
 let halteQuery = '';
+let halteMap = {};
+let adj = {};
 
 // ---- Init ----
-document.addEventListener('DOMContentLoaded', () => {
-  initGraf();
-  initBST();
+document.addEventListener('DOMContentLoaded', async () => {
+  await fetchInitData();
   buildSelects();
   renderHalteList();
   updateStackBadge();
 });
+
+async function fetchInitData() {
+  try {
+    const res = await fetch('/api/init');
+    const data = await res.json();
+    window.DATA_HALTE = data.DATA_HALTE;
+    halteMap = data.halteMap;
+    adj = data.adj;
+  } catch(e) {
+    console.error("Gagal load init data", e);
+  }
+}
 
 // ---- Tab Switching ----
 function switchTab(tab) {
@@ -41,8 +54,8 @@ function selectAlgo(algo) {
 
 // ---- Build Selects ----
 function buildSelects() {
-  if (!DATA_HALTE || !DATA_HALTE.length) return;
-  const sorted = DATA_HALTE.slice().sort((a, b) => a[0] - b[0]);
+  if (!window.DATA_HALTE || !window.DATA_HALTE.length) return;
+  const sorted = window.DATA_HALTE.slice().sort((a, b) => a[0] - b[0]);
   ['sel-asal', 'sel-tujuan'].forEach((selId, i) => {
     const sel = document.getElementById(selId);
     sel.innerHTML = '';
@@ -57,9 +70,9 @@ function buildSelects() {
 }
 
 // ---- Cari Rute ----
-function cariRute() {
-  const asal = +document.getElementById('sel-asal').value;
-  const tujuan = +document.getElementById('sel-tujuan').value;
+async function cariRute() {
+  const asal = document.getElementById('sel-asal').value;
+  const tujuan = document.getElementById('sel-tujuan').value;
   const area = document.getElementById('result-area');
 
   if (asal === tujuan) {
@@ -72,79 +85,49 @@ function cariRute() {
   btn.textContent = 'Memproses...';
 
   try {
-    if (currentAlgo === 'bfs' || currentAlgo === 'dijkstra') {
-      const res = currentAlgo === 'bfs' ? bfs(asal, tujuan) : dijkstra(asal, tujuan);
-      const r = makeResult(res, currentAlgo === 'bfs' ? 'BFS — Halte Tersedikit' : 'Dijkstra — Jarak Terpendek', asal, tujuan);
-      historyStack.push(r);
-      area.innerHTML = buildResultBox(r, currentAlgo);
-    } else {
-      // Bandingkan Keduanya
-      const resBfs = bfs(asal, tujuan);
-      const rBfs = makeResult(resBfs, 'BFS — Halte Tersedikit', asal, tujuan);
-      historyStack.push(rBfs);
+    const res = await fetch(`/api/rute?asal=${asal}&tujuan=${tujuan}&algo=${currentAlgo}`);
+    const data = await res.json();
 
-      const resDijkstra = dijkstra(asal, tujuan);
-      const rDijkstra = makeResult(resDijkstra, 'Dijkstra — Jarak Terpendek', asal, tujuan);
-      historyStack.push(rDijkstra);
+    if (res.ok) {
+      if (currentAlgo === 'keduanya') {
+        const rBfs = data.bfs;
+        const rDijkstra = data.dijkstra;
 
-      let compareNote = '';
-      if (rBfs.path && rDijkstra.path) {
-        const selisih = Math.abs(rBfs.jarak - rDijkstra.jarak).toFixed(2);
-        if (rDijkstra.jarak < rBfs.jarak)
-          compareNote = `Dijkstra lebih hemat <strong>${selisih} km</strong> dibanding BFS.`;
-        else if (rBfs.jarak < rDijkstra.jarak)
-          compareNote = `BFS menghasilkan jarak lebih pendek pada rute ini.`;
-        else
-          compareNote = `Kedua algoritma menghasilkan jarak yang sama: <strong>${rDijkstra.jarak} km</strong>.`;
+        let compareNote = '';
+        if (rBfs.path && rDijkstra.path) {
+          const selisih = Math.abs(rBfs.jarak - rDijkstra.jarak).toFixed(2);
+          if (rDijkstra.jarak < rBfs.jarak)
+            compareNote = `Dijkstra lebih hemat <strong>${selisih} km</strong> dibanding BFS.`;
+          else if (rBfs.jarak < rDijkstra.jarak)
+            compareNote = `BFS menghasilkan jarak lebih pendek pada rute ini.`;
+          else
+            compareNote = `Kedua algoritma menghasilkan jarak yang sama: <strong>${rDijkstra.jarak} km</strong>.`;
+        }
+
+        area.innerHTML = `
+          <div class="compare-grid">
+            ${buildResultBox(rBfs, 'bfs')}
+            ${buildResultBox(rDijkstra, 'dijkstra')}
+          </div>
+          ${compareNote ? `<div class="compare-note">${compareNote}</div>` : ''}
+        `;
+        await fetch('/api/riwayat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(rBfs) });
+        await fetch('/api/riwayat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(rDijkstra) });
+      } else {
+        area.innerHTML = buildResultBox(data, currentAlgo);
+        await fetch('/api/riwayat', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify(data) });
       }
-
-      area.innerHTML = `
-        <div class="compare-grid">
-          ${buildResultBox(rBfs, 'bfs')}
-          ${buildResultBox(rDijkstra, 'dijkstra')}
-        </div>
-        ${compareNote ? `<div class="compare-note">${compareNote}</div>` : ''}
-      `;
+    } else {
+       area.innerHTML = `<div class="result-box error"><div class="result-error-msg">⚠ ${data.error || 'Terjadi kesalahan.'}</div></div>`;
     }
   } catch (err) {
     console.error("Gagal cari rute:", err);
-    area.innerHTML = `<div class="result-box error"><div class="result-error-msg">⚠ Terjadi kesalahan saat mencari rute.</div></div>`;
+    area.innerHTML = `<div class="result-box error"><div class="result-error-msg">⚠ Terjadi kesalahan komunikasi dengan server.</div></div>`;
   } finally {
     btn.disabled = false;
     btn.textContent = '🔍  Cari Rute';
     updateStackBadge();
   }
-}
-
-function makeResult(r, metode, asal, tujuan) {
-  const now = new Date();
-  const timestamp = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}, ${String(now.getHours()).padStart(2,'0')}.${String(now.getMinutes()).padStart(2,'0')}.${String(now.getSeconds()).padStart(2,'0')}`;
-
-  if (!r.path) {
-    return {
-      metode,
-      path: null,
-      pathNama: [],
-      jarak: null,
-      ms: r.ms,
-      transit: 0,
-      asal: halteMap[asal] ? halteMap[asal].nama : "Tidak diketahui",
-      tujuan: halteMap[tujuan] ? halteMap[tujuan].nama : "Tidak diketahui",
-      timestamp
-    };
-  }
-
-  return {
-    metode,
-    path: r.path,
-    pathNama: r.path.map(hid => halteMap[hid].nama),
-    jarak: r.jarak,
-    ms: r.ms,
-    transit: r.path.length >= 2 ? r.path.length - 2 : 0,
-    asal: halteMap[asal].nama,
-    tujuan: halteMap[tujuan].nama,
-    timestamp
-  };
 }
 
 function buildResultBox(r, cls) {
@@ -185,7 +168,7 @@ function buildResultBox(r, cls) {
 
 // ---- Daftar Halte ----
 function filterHalte() {
-  halteQuery = document.getElementById('search-halte').value.toLowerCase();
+  halteQuery = document.getElementById('search-halte').value;
   renderHalteList();
 }
 
@@ -196,61 +179,51 @@ function sortHalte(by, el) {
   renderHalteList();
 }
 
-function renderHalteList() {
+async function renderHalteList() {
   const container = document.getElementById('halte-list');
+  try {
+    const res = await fetch(`/api/halte?query=${encodeURIComponent(halteQuery)}&sort=${halteSort}`);
+    const list = await res.json();
 
-  // Convert to list of dicts
-  let list = DATA_HALTE.map(([id, nama, zona, fasilitas]) => ({ id, nama, zona, fasilitas }));
+    if (!list.length) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada halte yang cocok.</p></div>`;
+      return;
+    }
 
-  // Filter by query using BST prefix search
-  if (halteQuery) {
-    list = bstInstance.prefixSearch(halteQuery);
-  }
-
-  // Sort using merge sort
-  if (halteSort === 'nama') {
-    list = mergeSort(list, h => h.nama);
-  } else if (halteSort === 'id') {
-    list = mergeSort(list, h => h.id);
-  } else if (halteSort === 'zona') {
-    list = mergeSort(list, h => h.zona + h.nama);
-  }
-
-  if (!list.length) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada halte yang cocok.</p></div>`;
-    return;
-  }
-
-  container.innerHTML = list.map(h => `
-    <div class="halte-item" onclick="toggleHalteDetail(${h.id}, this)">
-      <div class="halte-num">${h.id}</div>
-      <div class="halte-info">
-        <div class="halte-name">${h.nama}</div>
-        <div class="halte-fasilitas">${h.fasilitas.join(', ') || '—'}</div>
-      </div>
-      <span class="zona-badge z-${h.zona}">Zona ${h.zona}</span>
-      <span class="chevron">›</span>
-    </div>
-    <div class="halte-detail" id="detail-${h.id}" style="display:none;">
-      <div class="detail-grid">
-        <div class="detail-col">
-          <div class="detail-label">Fasilitas</div>
-          <div class="detail-tags">${h.fasilitas.map(f => `<span class="fasilitas-tag">${f}</span>`).join('') || '—'}</div>
+    container.innerHTML = list.map(h => `
+      <div class="halte-item" onclick="toggleHalteDetail('${h.id}', this)">
+        <div class="halte-num">${h.id}</div>
+        <div class="halte-info">
+          <div class="halte-name">${h.nama}</div>
+          <div class="halte-fasilitas">${h.fasilitas.join(', ') || '—'}</div>
         </div>
-        <div class="detail-col">
-          <div class="detail-label">Terhubung ke</div>
-          <div class="tetangga-list">
-            ${(adj[h.id] || []).map(([nid, d]) => `
-              <div class="tetangga-row">
-                <span>${halteMap[nid] ? halteMap[nid].nama : 'Tidak diketahui'}</span>
-                <span class="tetangga-dist">${d} km</span>
-              </div>
-            `).join('')}
+        <span class="zona-badge z-${h.zona}">Zona ${h.zona}</span>
+        <span class="chevron">›</span>
+      </div>
+      <div class="halte-detail" id="detail-${h.id}" style="display:none;">
+        <div class="detail-grid">
+          <div class="detail-col">
+            <div class="detail-label">Fasilitas</div>
+            <div class="detail-tags">${h.fasilitas.map(f => `<span class="fasilitas-tag">${f}</span>`).join('') || '—'}</div>
+          </div>
+          <div class="detail-col">
+            <div class="detail-label">Terhubung ke</div>
+            <div class="tetangga-list">
+              ${(adj[h.id] || []).map(([nid, d]) => `
+                <div class="tetangga-row">
+                  <span>${halteMap[nid] ? halteMap[nid].nama : 'Tidak diketahui'}</span>
+                  <span class="tetangga-dist">${d} km</span>
+                </div>
+              `).join('')}
+            </div>
           </div>
         </div>
       </div>
-    </div>
-  `).join('');
+    `).join('');
+  } catch(e) {
+      console.error(e);
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠</div><p>Gagal memuat halte.</p></div>`;
+  }
 }
 
 function toggleHalteDetail(id, el) {
@@ -263,57 +236,82 @@ function toggleHalteDetail(id, el) {
 }
 
 // ---- Riwayat ----
-function renderRiwayat() {
+async function renderRiwayat() {
   const container = document.getElementById('riwayat-list');
-  updateStackBadge();
-  const stack = historyStack.toList();
+  try {
+    const res = await fetch('/api/riwayat');
+    const stack = await res.json();
+    updateStackBadge();
 
-  if (!stack.length) {
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><p>Belum ada riwayat pencarian.<br>Cari rute terlebih dahulu.</p></div>`;
-    return;
+    if (!stack.length) {
+      container.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><p>Belum ada riwayat pencarian.<br>Cari rute terlebih dahulu.</p></div>`;
+      return;
+    }
+
+    container.innerHTML = stack.map((r, i) => `
+      <div class="history-item ${i === 0 ? 'latest' : ''}">
+        <div class="history-top">
+          <span class="history-badge ${r.metode.startsWith('BFS') ? 'hb-bfs' : 'hb-dijk'}">${r.metode.startsWith('BFS') ? 'BFS' : 'Dijkstra'}</span>
+          ${i === 0 ? '<span class="latest-badge">Terbaru</span>' : ''}
+          <span class="history-time">${r.timestamp}</span>
+        </div>
+        <div class="history-route">${r.asal} <span>→</span> ${r.tujuan}</div>
+        <div class="history-stats">
+          <span>📍 ${r.jarak} km</span>
+          <span>🚏 ${r.path.length} halte</span>
+          <span>⏱ ${r.ms} ms</span>
+        </div>
+      </div>
+    `).join('');
+  } catch(e) {
+      console.error(e);
   }
-
-  container.innerHTML = stack.map((r, i) => `
-    <div class="history-item ${i === 0 ? 'latest' : ''}">
-      <div class="history-top">
-        <span class="history-badge ${r.metode.startsWith('BFS') ? 'hb-bfs' : 'hb-dijk'}">${r.metode.startsWith('BFS') ? 'BFS' : 'Dijkstra'}</span>
-        ${i === 0 ? '<span class="latest-badge">Terbaru</span>' : ''}
-        <span class="history-time">${r.timestamp}</span>
-      </div>
-      <div class="history-route">${r.asal} <span>→</span> ${r.tujuan}</div>
-      <div class="history-stats">
-        <span>📍 ${r.jarak} km</span>
-        <span>🚏 ${r.path.length} halte</span>
-        <span>⏱ ${r.ms} ms</span>
-      </div>
-    </div>
-  `).join('');
 }
 
-function hapusRiwayatTerakhir() {
-  const removed = historyStack.pop();
-  if (!removed) {
-    showToast('Riwayat sudah kosong.');
-    return;
-  }
-  showToast(`Dihapus: ${removed.asal} → ${removed.tujuan}`);
-  renderRiwayat();
-}
-
-function hapusSemuaRiwayat() {
-  const stack = historyStack.toList();
-  if (!stack.length) { showToast('Riwayat sudah kosong.'); return; }
-  if (confirm('Hapus semua riwayat pencarian?')) {
-    historyStack.clear();
+async function hapusRiwayatTerakhir() {
+  try {
+    const res = await fetch('/api/riwayat?action=pop', { method: 'DELETE' });
+    const data = await res.json();
+    if (!data.removed) {
+      showToast('Riwayat sudah kosong.');
+      return;
+    }
+    showToast(`Dihapus: ${data.removed.asal} → ${data.removed.tujuan}`);
     renderRiwayat();
-    showToast('Semua riwayat berhasil dihapus.');
+  } catch(e) {}
+}
+
+async function hapusSemuaRiwayat() {
+  if (confirm('Hapus semua riwayat pencarian?')) {
+    try {
+      await fetch('/api/riwayat?action=clear', { method: 'DELETE' });
+      renderRiwayat();
+      showToast('Semua riwayat berhasil dihapus.');
+    } catch(e) {}
   }
 }
 
-function updateStackBadge() {
+async function updateStackBadge() {
   const badge = document.getElementById('stack-badge');
   if (badge) {
-    badge.textContent = historyStack.size || '';
+    try {
+      const res = await fetch('/api/riwayat');
+      const stack = await res.json();
+      badge.textContent = stack.length || '';
+    } catch(e){}
+  }
+}
+
+// ---- Unit Test ----
+async function jalankanTest() {
+  const out = document.getElementById('test-output');
+  out.innerHTML = 'Menjalankan unit test di backend...';
+  try {
+    const res = await fetch('/api/test');
+    const data = await res.json();
+    out.innerHTML = data.output;
+  } catch(e) {
+    out.innerHTML = '<div class="test-fail">❌ Gagal menghubungi server atau menjalankan test.</div>';
   }
 }
 
