@@ -1,38 +1,20 @@
 // ============================================================
-// APP — UI Controller (Connected to Python Flask Backend)
+// APP — UI Controller (Client-side, no backend required)
+// Works on static hosting like Vercel
 // ============================================================
 
 let currentAlgo = 'bfs';
 let halteSort = 'nama';
 let halteQuery = '';
 
-// Backend data cache
-let DATA_HALTE = [];
-let DATA_EDGE = [];
-let halteMap = {};
-let adj = {};
-
 // ---- Init ----
-document.addEventListener('DOMContentLoaded', async () => {
-  await initBackendData();
+document.addEventListener('DOMContentLoaded', () => {
+  initGraf();
+  initBST();
   buildSelects();
   renderHalteList();
   updateStackBadge();
 });
-
-async function initBackendData() {
-  try {
-    const res = await fetch('/api/init');
-    const data = await res.json();
-    DATA_HALTE = data.DATA_HALTE;
-    DATA_EDGE = data.DATA_EDGE;
-    halteMap = data.halteMap;
-    adj = data.adj;
-  } catch (err) {
-    console.error("Gagal inisialisasi data dari backend:", err);
-    showToast("Gagal terhubung ke Python Backend.");
-  }
-}
 
 // ---- Tab Switching ----
 function switchTab(tab) {
@@ -49,7 +31,7 @@ function selectAlgo(algo) {
   currentAlgo = algo;
   document.querySelectorAll('.algo-card').forEach(c => c.classList.remove('selected'));
   document.querySelectorAll('.algo-card-full').forEach(c => c.classList.remove('selected'));
-  
+
   if (algo === 'keduanya') {
     document.getElementById('algo-keduanya').classList.add('selected');
   } else {
@@ -63,7 +45,7 @@ function buildSelects() {
   const sorted = DATA_HALTE.slice().sort((a, b) => a[0] - b[0]);
   ['sel-asal', 'sel-tujuan'].forEach((selId, i) => {
     const sel = document.getElementById(selId);
-    sel.innerHTML = ''; // Clear options
+    sel.innerHTML = '';
     sorted.forEach(([hid, nama]) => {
       const opt = document.createElement('option');
       opt.value = hid;
@@ -75,7 +57,7 @@ function buildSelects() {
 }
 
 // ---- Cari Rute ----
-async function cariRute() {
+function cariRute() {
   const asal = +document.getElementById('sel-asal').value;
   const tujuan = +document.getElementById('sel-tujuan').value;
   const area = document.getElementById('result-area');
@@ -90,66 +72,79 @@ async function cariRute() {
   btn.textContent = 'Memproses...';
 
   try {
-    const res = await fetch(`/api/rute?asal=${asal}&tujuan=${tujuan}&algo=${currentAlgo}`);
-    if (!res.ok) {
-      const errData = await res.json();
-      area.innerHTML = `<div class="result-box error"><div class="result-error-msg">⚠ ${errData.error || 'Terjadi kesalahan.'}</div></div>`;
-      btn.disabled = false;
-      btn.textContent = '🔍  Cari Rute';
-      return;
-    }
-    
-    const r = await res.json();
-    
     if (currentAlgo === 'bfs' || currentAlgo === 'dijkstra') {
-      // Save result in Python history stack
-      await fetch('/api/riwayat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(r)
-      });
+      const res = currentAlgo === 'bfs' ? bfs(asal, tujuan) : dijkstra(asal, tujuan);
+      const r = makeResult(res, currentAlgo === 'bfs' ? 'BFS — Halte Tersedikit' : 'Dijkstra — Jarak Terpendek', asal, tujuan);
+      historyStack.push(r);
       area.innerHTML = buildResultBox(r, currentAlgo);
     } else {
       // Bandingkan Keduanya
-      // Save both results in Python history stack
-      await fetch('/api/riwayat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(r.bfs)
-      });
-      await fetch('/api/riwayat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(r.dijkstra)
-      });
-      
+      const resBfs = bfs(asal, tujuan);
+      const rBfs = makeResult(resBfs, 'BFS — Halte Tersedikit', asal, tujuan);
+      historyStack.push(rBfs);
+
+      const resDijkstra = dijkstra(asal, tujuan);
+      const rDijkstra = makeResult(resDijkstra, 'Dijkstra — Jarak Terpendek', asal, tujuan);
+      historyStack.push(rDijkstra);
+
       let compareNote = '';
-      if (r.bfs.path && r.dijkstra.path) {
-        const selisih = Math.abs(r.bfs.jarak - r.dijkstra.jarak).toFixed(2);
-        if (r.dijkstra.jarak < r.bfs.jarak)
+      if (rBfs.path && rDijkstra.path) {
+        const selisih = Math.abs(rBfs.jarak - rDijkstra.jarak).toFixed(2);
+        if (rDijkstra.jarak < rBfs.jarak)
           compareNote = `Dijkstra lebih hemat <strong>${selisih} km</strong> dibanding BFS.`;
-        else if (r.bfs.jarak < r.dijkstra.jarak)
+        else if (rBfs.jarak < rDijkstra.jarak)
           compareNote = `BFS menghasilkan jarak lebih pendek pada rute ini.`;
         else
-          compareNote = `Kedua algoritma menghasilkan jarak yang sama: <strong>${r.dijkstra.jarak} km</strong>.`;
+          compareNote = `Kedua algoritma menghasilkan jarak yang sama: <strong>${rDijkstra.jarak} km</strong>.`;
       }
 
       area.innerHTML = `
         <div class="compare-grid">
-          ${buildResultBox(r.bfs, 'bfs')}
-          ${buildResultBox(r.dijkstra, 'dijkstra')}
+          ${buildResultBox(rBfs, 'bfs')}
+          ${buildResultBox(rDijkstra, 'dijkstra')}
         </div>
         ${compareNote ? `<div class="compare-note">${compareNote}</div>` : ''}
       `;
     }
   } catch (err) {
     console.error("Gagal cari rute:", err);
-    area.innerHTML = `<div class="result-box error"><div class="result-error-msg">⚠ Gagal menghubungi backend server.</div></div>`;
+    area.innerHTML = `<div class="result-box error"><div class="result-error-msg">⚠ Terjadi kesalahan saat mencari rute.</div></div>`;
   } finally {
     btn.disabled = false;
     btn.textContent = '🔍  Cari Rute';
-    await updateStackBadge();
+    updateStackBadge();
   }
+}
+
+function makeResult(r, metode, asal, tujuan) {
+  const now = new Date();
+  const timestamp = `${String(now.getDate()).padStart(2,'0')}/${String(now.getMonth()+1).padStart(2,'0')}/${now.getFullYear()}, ${String(now.getHours()).padStart(2,'0')}.${String(now.getMinutes()).padStart(2,'0')}.${String(now.getSeconds()).padStart(2,'0')}`;
+
+  if (!r.path) {
+    return {
+      metode,
+      path: null,
+      pathNama: [],
+      jarak: null,
+      ms: r.ms,
+      transit: 0,
+      asal: halteMap[asal] ? halteMap[asal].nama : "Tidak diketahui",
+      tujuan: halteMap[tujuan] ? halteMap[tujuan].nama : "Tidak diketahui",
+      timestamp
+    };
+  }
+
+  return {
+    metode,
+    path: r.path,
+    pathNama: r.path.map(hid => halteMap[hid].nama),
+    jarak: r.jarak,
+    ms: r.ms,
+    transit: r.path.length >= 2 ? r.path.length - 2 : 0,
+    asal: halteMap[asal].nama,
+    tujuan: halteMap[tujuan].nama,
+    timestamp
+  };
 }
 
 function buildResultBox(r, cls) {
@@ -201,51 +196,61 @@ function sortHalte(by, el) {
   renderHalteList();
 }
 
-async function renderHalteList() {
+function renderHalteList() {
   const container = document.getElementById('halte-list');
-  try {
-    const res = await fetch(`/api/halte?query=${encodeURIComponent(halteQuery)}&sort=${halteSort}`);
-    const list = await res.json();
-    
-    if (!list.length) {
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada halte yang cocok.</p></div>`;
-      return;
-    }
-    
-    container.innerHTML = list.map(h => `
-      <div class="halte-item" onclick="toggleHalteDetail(${h.id}, this)">
-        <div class="halte-num">${h.id}</div>
-        <div class="halte-info">
-          <div class="halte-name">${h.nama}</div>
-          <div class="halte-fasilitas">${h.fasilitas.join(', ') || '—'}</div>
-        </div>
-        <span class="zona-badge z-${h.zona}">Zona ${h.zona}</span>
-        <span class="chevron">›</span>
-      </div>
-      <div class="halte-detail" id="detail-${h.id}" style="display:none;">
-        <div class="detail-grid">
-          <div class="detail-col">
-            <div class="detail-label">Fasilitas</div>
-            <div class="detail-tags">${h.fasilitas.map(f => `<span class="fasilitas-tag">${f}</span>`).join('') || '—'}</div>
-          </div>
-          <div class="detail-col">
-            <div class="detail-label">Terhubung ke</div>
-            <div class="tetangga-list">
-              ${(adj[h.id] || []).map(([nid, d]) => `
-                <div class="tetangga-row">
-                  <span>${halteMap[nid] ? halteMap[nid].nama : 'Tidak diketahui'}</span>
-                  <span class="tetangga-dist">${d} km</span>
-                </div>
-              `).join('')}
-            </div>
-          </div>
-        </div>
-      </div>
-    `).join('');
-  } catch (err) {
-    console.error("Gagal memuat daftar halte:", err);
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠</div><p>Gagal memuat data halte.</p></div>`;
+
+  // Convert to list of dicts
+  let list = DATA_HALTE.map(([id, nama, zona, fasilitas]) => ({ id, nama, zona, fasilitas }));
+
+  // Filter by query using BST prefix search
+  if (halteQuery) {
+    list = bstInstance.prefixSearch(halteQuery);
   }
+
+  // Sort using merge sort
+  if (halteSort === 'nama') {
+    list = mergeSort(list, h => h.nama);
+  } else if (halteSort === 'id') {
+    list = mergeSort(list, h => h.id);
+  } else if (halteSort === 'zona') {
+    list = mergeSort(list, h => h.zona + h.nama);
+  }
+
+  if (!list.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada halte yang cocok.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = list.map(h => `
+    <div class="halte-item" onclick="toggleHalteDetail(${h.id}, this)">
+      <div class="halte-num">${h.id}</div>
+      <div class="halte-info">
+        <div class="halte-name">${h.nama}</div>
+        <div class="halte-fasilitas">${h.fasilitas.join(', ') || '—'}</div>
+      </div>
+      <span class="zona-badge z-${h.zona}">Zona ${h.zona}</span>
+      <span class="chevron">›</span>
+    </div>
+    <div class="halte-detail" id="detail-${h.id}" style="display:none;">
+      <div class="detail-grid">
+        <div class="detail-col">
+          <div class="detail-label">Fasilitas</div>
+          <div class="detail-tags">${h.fasilitas.map(f => `<span class="fasilitas-tag">${f}</span>`).join('') || '—'}</div>
+        </div>
+        <div class="detail-col">
+          <div class="detail-label">Terhubung ke</div>
+          <div class="tetangga-list">
+            ${(adj[h.id] || []).map(([nid, d]) => `
+              <div class="tetangga-row">
+                <span>${halteMap[nid] ? halteMap[nid].nama : 'Tidak diketahui'}</span>
+                <span class="tetangga-dist">${d} km</span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+      </div>
+    </div>
+  `).join('');
 }
 
 function toggleHalteDetail(id, el) {
@@ -258,80 +263,57 @@ function toggleHalteDetail(id, el) {
 }
 
 // ---- Riwayat ----
-async function renderRiwayat() {
+function renderRiwayat() {
   const container = document.getElementById('riwayat-list');
-  await updateStackBadge();
-  try {
-    const res = await fetch('/api/riwayat');
-    const stack = await res.json();
-    
-    if (!stack.length) {
-      container.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><p>Belum ada riwayat pencarian.<br>Cari rute terlebih dahulu.</p></div>`;
-      return;
-    }
-    
-    container.innerHTML = stack.map((r, i) => `
-      <div class="history-item ${i === 0 ? 'latest' : ''}">
-        <div class="history-top">
-          <span class="history-badge ${r.metode.startsWith('BFS') ? 'hb-bfs' : 'hb-dijk'}">${r.metode.startsWith('BFS') ? 'BFS' : 'Dijkstra'}</span>
-          ${i === 0 ? '<span class="latest-badge">Terbaru</span>' : ''}
-          <span class="history-time">${r.timestamp}</span>
-        </div>
-        <div class="history-route">${r.asal} <span>→</span> ${r.tujuan}</div>
-        <div class="history-stats">
-          <span>📍 ${r.jarak} km</span>
-          <span>🚏 ${r.path.length} halte</span>
-          <span>⏱ ${r.ms} ms</span>
-        </div>
+  updateStackBadge();
+  const stack = historyStack.toList();
+
+  if (!stack.length) {
+    container.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><p>Belum ada riwayat pencarian.<br>Cari rute terlebih dahulu.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = stack.map((r, i) => `
+    <div class="history-item ${i === 0 ? 'latest' : ''}">
+      <div class="history-top">
+        <span class="history-badge ${r.metode.startsWith('BFS') ? 'hb-bfs' : 'hb-dijk'}">${r.metode.startsWith('BFS') ? 'BFS' : 'Dijkstra'}</span>
+        ${i === 0 ? '<span class="latest-badge">Terbaru</span>' : ''}
+        <span class="history-time">${r.timestamp}</span>
       </div>
-    `).join('');
-  } catch (err) {
-    console.error("Gagal memuat riwayat:", err);
-    container.innerHTML = `<div class="empty-state"><div class="empty-icon">⚠</div><p>Gagal memuat riwayat.</p></div>`;
+      <div class="history-route">${r.asal} <span>→</span> ${r.tujuan}</div>
+      <div class="history-stats">
+        <span>📍 ${r.jarak} km</span>
+        <span>🚏 ${r.path.length} halte</span>
+        <span>⏱ ${r.ms} ms</span>
+      </div>
+    </div>
+  `).join('');
+}
+
+function hapusRiwayatTerakhir() {
+  const removed = historyStack.pop();
+  if (!removed) {
+    showToast('Riwayat sudah kosong.');
+    return;
+  }
+  showToast(`Dihapus: ${removed.asal} → ${removed.tujuan}`);
+  renderRiwayat();
+}
+
+function hapusSemuaRiwayat() {
+  const stack = historyStack.toList();
+  if (!stack.length) { showToast('Riwayat sudah kosong.'); return; }
+  if (confirm('Hapus semua riwayat pencarian?')) {
+    historyStack.clear();
+    renderRiwayat();
+    showToast('Semua riwayat berhasil dihapus.');
   }
 }
 
-async function hapusRiwayatTerakhir() {
-  try {
-    const res = await fetch('/api/riwayat?action=pop', { method: 'DELETE' });
-    const data = await res.json();
-    if (!data.removed) {
-      showToast('Riwayat sudah kosong.');
-      return;
-    }
-    showToast(`Dihapus: ${data.removed.asal} → ${data.removed.tujuan}`);
-    await renderRiwayat();
-  } catch (err) {
-    console.error("Gagal menghapus riwayat terakhir:", err);
-  }
-}
-
-async function hapusSemuaRiwayat() {
-  try {
-    const res = await fetch('/api/riwayat');
-    const stack = await res.json();
-    if (!stack.length) { showToast('Riwayat sudah kosong.'); return; }
-    
-    if (confirm('Hapus semua riwayat pencarian?')) {
-      await fetch('/api/riwayat?action=clear', { method: 'DELETE' });
-      await renderRiwayat();
-      showToast('Semua riwayat berhasil dihapus.');
-    }
-  } catch (err) {
-    console.error("Gagal menghapus semua riwayat:", err);
-  }
-}
-
-async function updateStackBadge() {
+function updateStackBadge() {
   const badge = document.getElementById('stack-badge');
   if (badge) {
-    try {
-      const res = await fetch('/api/riwayat');
-      const stack = await res.json();
-      badge.textContent = stack.length || '';
-    } catch (err) {
-      console.error("Gagal update badge:", err);
-    }
+    badge.textContent = historyStack.size || '';
   }
 }
 
