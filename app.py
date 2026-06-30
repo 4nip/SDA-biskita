@@ -6,7 +6,7 @@ from algorithms import (
     merge_sort, bst_prefix
 )
 
-app = Flask(__name__)
+app = Flask(__name__, static_url_path='/css', static_folder='css')
 
 def make_result(r, metode, asal, tujuan):
     if r["path"] is None:
