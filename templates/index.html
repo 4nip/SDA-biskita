@@ -260,8 +260,8 @@
                 <div class="empty-state"><div class="empty-icon">🔍</div><p>Tidak ada halte yang cocok.</p></div>
               {% else %}
                 {% for h in list_halte %}
-                <details class="halte-item-details" style="margin-bottom: 8px; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; background: var(--surface);">
-                  <summary class="halte-item" style="cursor: pointer; border: none; margin: 0; padding: 16px;">
+                <details class="halte-item-details">
+                  <summary class="halte-item">
                     <div class="halte-num">{{ h.id }}</div>
                     <div class="halte-info">
                       <div class="halte-name">{{ h.nama }}</div>
@@ -270,7 +270,7 @@
                     <span class="zona-badge z-{{ h.zona }}">Zona {{ h.zona }}</span>
                     <span class="chevron" style="pointer-events:none;">›</span>
                   </summary>
-                  <div class="halte-detail" style="padding: 0 16px 16px; border-top: 1px solid var(--border);">
+                  <div class="halte-detail">
                     <div class="detail-grid">
                       <div class="detail-col">
                         <div class="detail-label">Fasilitas</div>
